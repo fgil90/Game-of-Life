@@ -1,25 +1,7 @@
-/*******************************************************************************************
-*
-*   raylib [core] example - Basic 3d example
-*
-*   Welcome to raylib!
-*
-*   To compile example, just press F5.
-*   Note that compiled executable is placed in the same folder as .c file
-*
-*   You can find all basic examples on C:\raylib\raylib\examples folder or
-*   raylib official webpage: www.raylib.com
-*
-*   Enjoy using raylib. :)
-*
-*   This example has been created using raylib 1.0 (www.raylib.com)
-*   raylib is licensed under an unmodified zlib/libpng license (View raylib.h for details)
-*
-*   Copyright (c) 2013-2023 Ramon Santamaria (@raysan5)
-*
-********************************************************************************************/
-
 #include "raylib.h"
+#include <math.h>
+#include <stdio.h>
+#include <stdbool.h>
 
 #if defined(PLATFORM_WEB)
     #include <emscripten/emscripten.h>
@@ -28,44 +10,76 @@
 //----------------------------------------------------------------------------------
 // Local Variables Definition (local to this module)
 //----------------------------------------------------------------------------------
-Camera camera = { 0 };
-Vector3 cubePosition = { 0 };
+
+const int screenWidth  = 800;
+const int screenHeight = 800;
+const int draw_fps     = 60;
+float logic_fps        = 10.0f;
+
+const int cellSize     = 10;
+const int gridWidth    = screenHeight / cellSize;
+const int gridHeight   = screenHeight / cellSize;
+const int n_cells      = gridWidth * gridHeight;
+
+const Color cellColor  = BLACK;
+const Color bgColor    = WHITE;
+
+typedef struct Cell
+{
+    int x;
+    int y;
+    int isAlive; // bool
+    int nAliveNeig;
+} CELL;
 
 //----------------------------------------------------------------------------------
 // Local Functions Declaration
 //----------------------------------------------------------------------------------
-static void UpdateDrawFrame(void);          // Update and draw one frame
+
+static void initializeCells(CELL *cellArray, int n_cells);
+
+static int mtoi(int x, int y);
+
+static void UpdateCells(CELL *cellArray, int n_cells);           // Update all cells in cellArray
+static void DrawCells(const CELL *cellArray, int n_cells);       // Draws all cells in cellArray
+
 
 //----------------------------------------------------------------------------------
 // Main entry point
 //----------------------------------------------------------------------------------
+
 int main()
 {
     // Initialization
     //--------------------------------------------------------------------------------------
-    const int screenWidth = 800;
-    const int screenHeight = 450;
+    CELL cellArray[n_cells];
+    InitWindow(screenWidth, screenHeight, "Game of Life");
 
-    InitWindow(screenWidth, screenHeight, "raylib");
-
-    camera.position = (Vector3){ 10.0f, 10.0f, 8.0f };
-    camera.target = (Vector3){ 0.0f, 0.0f, 0.0f };
-    camera.up = (Vector3){ 0.0f, 1.0f, 0.0f };
-    camera.fovy = 60.0f;
-    camera.projection = CAMERA_PERSPECTIVE;
-
+    initializeCells(cellArray, n_cells);
     //--------------------------------------------------------------------------------------
 
 #if defined(PLATFORM_WEB)
-    emscripten_set_main_loop(UpdateDrawFrame, 60, 1);
+    emscripten_set_main_loop(UpdateDrawFrame, fps, 1);
 #else
-    SetTargetFPS(60);               // Set our game to run at 60 frames-per-second
+    SetTargetFPS(draw_fps);               // Set our game maximum FPS
     //--------------------------------------------------------------------------------------
+    float acc;
 
     // Main game loop
     while (!WindowShouldClose())    // Detect window close button or ESC key
     {
-        UpdateDrawFrame();
+        acc += GetFrameTime();
+        if (acc > 1.0f/logic_fps){
+            acc -= 1.0f/logic_fps;
+            UpdateCells(cellArray, n_cells);
+        }
+
+        BeginDrawing();
+
+        ClearBackground(bgColor);
+        DrawCells(cellArray, n_cells);
+
+        EndDrawing();
     }
 #endif
 
@@ -73,36 +87,77 @@ int main()
     //--------------------------------------------------------------------------------------
     CloseWindow();                  // Close window and OpenGL context
     //--------------------------------------------------------------------------------------
-
     return 0;
 }
 
-// Update and draw game frame
-static void UpdateDrawFrame(void)
+static int mtoi(int x, int y){
+    if (x < 0 || y < 0 || x >= gridWidth || y >= gridHeight)  return -1;
+    return y * gridWidth + x;
+}
+
+static void UpdateCells(CELL *cellArray, int n_cells){
+    for (int i = 0; i < n_cells; i++){
+        if (!cellArray[i].isAlive) continue;
+
+        int x = cellArray[i].x;
+        int y = cellArray[i].y;
+
+        int neighbours[8] = {
+                mtoi(x+1, y  ),
+                mtoi(x-1, y  ),
+                mtoi(x,   y+1),
+                mtoi(x+1, y+1),
+                mtoi(x-1, y+1),
+                mtoi(x,   y-1),
+                mtoi(x+1, y-1),
+                mtoi(x-1, y-1)
+            };
+
+        for (int i = 0; i < 8; i++) {
+            if ( neighbours[i] < 0 ) continue;
+            cellArray[neighbours[i]].nAliveNeig++;
+        }
+    }
+
+    for (int i = 0; i < n_cells; i++)
+    {
+        CELL *c = &cellArray[i];
+        int nAliveNeig = c->nAliveNeig;
+        c->nAliveNeig = 0;
+        if (nAliveNeig == 3) {
+            c->isAlive = 1; 
+            continue;
+        }
+        if (nAliveNeig < 2){
+            c->isAlive = 0;
+            continue;
+        }
+        if (nAliveNeig > 3){
+            c->isAlive = 0;
+            continue;
+        }
+    }
+}
+
+static void DrawCells(const CELL *cellArray, int n_cells)
 {
-    // Update
-    //----------------------------------------------------------------------------------
-    UpdateCamera(&camera, CAMERA_ORBITAL);
-    //----------------------------------------------------------------------------------
+    for (int i = 0; i < n_cells; i++)
+    {
+        CELL c = cellArray[i];
+        if (c.isAlive) DrawRectangle(c.x * cellSize, c.y * cellSize, cellSize, cellSize, cellColor);
+    }
+}
 
-    // Draw
-    //----------------------------------------------------------------------------------
-    BeginDrawing();
-
-        ClearBackground(RAYWHITE);
-
-        BeginMode3D(camera);
-
-            DrawCube(cubePosition, 2.0f, 2.0f, 2.0f, RED);
-            DrawCubeWires(cubePosition, 2.0f, 2.0f, 2.0f, MAROON);
-            DrawGrid(10, 1.0f);
-
-        EndMode3D();
-
-        DrawText("This is a raylib example", 10, 40, 20, DARKGRAY);
-
-        DrawFPS(10, 10);
-
-    EndDrawing();
-    //----------------------------------------------------------------------------------
+static void initializeCells(CELL *cellArray, int n_cells)
+{
+    for (int y = 0; y < gridHeight; y++){
+        for (int x = 0; x < gridWidth; x++)
+        {
+            int index = mtoi(x, y);
+            cellArray[index].x = x;
+            cellArray[index].y = y;
+            cellArray[index].isAlive = GetRandomValue(0,1);
+            cellArray[index].nAliveNeig = 0;
+        }
+    }
 }
