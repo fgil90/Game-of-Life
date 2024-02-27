@@ -1,11 +1,15 @@
 #include "raylib.h"
 #include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <stdbool.h>
+
+#define MAX_LOGIC_FPS 60
 
 #if defined(PLATFORM_WEB)
     #include <emscripten/emscripten.h>
 #endif
+
 
 //----------------------------------------------------------------------------------
 // Local Variables Definition (local to this module)
@@ -16,7 +20,9 @@ const int screenHeight = 800;
 const int draw_fps     = 60;
 float logic_fps        = 10.0f;
 
-const int cellSize     = 10;
+bool isRunning = false;
+
+const int cellSize     = 1;
 const int gridWidth    = screenHeight / cellSize;
 const int gridHeight   = screenHeight / cellSize;
 const int n_cells      = gridWidth * gridHeight;
@@ -43,16 +49,16 @@ static int mtoi(int x, int y);
 static void UpdateCells(CELL *cellArray, int n_cells);           // Update all cells in cellArray
 static void DrawCells(const CELL *cellArray, int n_cells);       // Draws all cells in cellArray
 
+    //----------------------------------------------------------------------------------
+    // Main entry point
+    //----------------------------------------------------------------------------------
 
-//----------------------------------------------------------------------------------
-// Main entry point
-//----------------------------------------------------------------------------------
-
-int main()
+    int
+    main()
 {
     // Initialization
     //--------------------------------------------------------------------------------------
-    CELL cellArray[n_cells];
+    CELL *cellArray = calloc(n_cells, sizeof(CELL));
     InitWindow(screenWidth, screenHeight, "Game of Life");
 
     initializeCells(cellArray, n_cells);
@@ -68,16 +74,32 @@ int main()
     // Main game loop
     while (!WindowShouldClose())    // Detect window close button or ESC key
     {
-        acc += GetFrameTime();
-        if (acc > 1.0f/logic_fps){
-            acc -= 1.0f/logic_fps;
-            UpdateCells(cellArray, n_cells);
+        if(isRunning){
+            acc += GetFrameTime();
+            if (acc > 1.0f/logic_fps){
+                acc -= 1.0f/logic_fps;
+                UpdateCells(cellArray, n_cells);
+            }
+
         }
+
+        if (IsKeyPressed(KEY_SPACE)) isRunning = !isRunning;
+        if (IsKeyPressedRepeat(KEY_LEFT)) {
+            logic_fps --;
+            logic_fps = logic_fps < 1 ? 1 : logic_fps;
+        }
+        if (IsKeyPressedRepeat(KEY_RIGHT))
+        {
+            logic_fps++;
+            logic_fps = logic_fps > MAX_LOGIC_FPS ? MAX_LOGIC_FPS : logic_fps;
+        }
+        if (IsKeyPressed(KEY_R)) initializeCells(cellArray, n_cells);
 
         BeginDrawing();
 
         ClearBackground(bgColor);
         DrawCells(cellArray, n_cells);
+        DrawFPS(20, 20);
 
         EndDrawing();
     }
@@ -124,16 +146,16 @@ static void UpdateCells(CELL *cellArray, int n_cells){
         CELL *c = &cellArray[i];
         int nAliveNeig = c->nAliveNeig;
         c->nAliveNeig = 0;
-        if (nAliveNeig == 3) {
-            c->isAlive = 1; 
+        if (nAliveNeig > 3){
+            c->isAlive = 0;
             continue;
         }
         if (nAliveNeig < 2){
             c->isAlive = 0;
             continue;
         }
-        if (nAliveNeig > 3){
-            c->isAlive = 0;
+        if (nAliveNeig == 3) {
+            c->isAlive = 1; 
             continue;
         }
     }
